@@ -1,15 +1,20 @@
-import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import openai
+from google.cloud import aiplatform
+import os
 from dotenv import load_dotenv
 
-load_dotenv()  # load environment variables from .env
+load_dotenv()  # Load environment variables from .env file
 
 app = Flask(__name__)
 CORS(app)
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Initialize Google AI Platform client
+PROJECT_ID = os.getenv("GCP_PROJECT_ID")
+LOCATION = os.getenv("GCP_LOCATION", "us-central1")  # default location
+PUBLISHER_MODEL_ID = os.getenv("GEMINI_MODEL_ID")  # e.g. "text-bison@001"
+
+client = aiplatform.gapic.PredictionServiceClient()
 
 QUESTIONS = [
     {"question": "What's your name?", "guidance": "Please type your full name."},
@@ -22,7 +27,7 @@ user_modes = {}
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Backend is live!"
+    return "Gemini backend is live!"
 
 @app.route("/api/questions", methods=["GET"])
 def get_initial_question():
@@ -36,6 +41,7 @@ def submit_answer():
     data = request.get_json()
     user_id = data.get("user", "default")
     answer = data.get("answer", "").strip()
+
     mode = user_modes.get(user_id, "guided")
 
     if mode == "guided":
@@ -59,24 +65,30 @@ def submit_answer():
                 "guidance": ""
             })
 
-        prompt = (
-            f"You are an expert tutor specializing in K-12 education across math, science, English, "
-            f"and social studies. Answer the following question clearly and appropriately for a student:\n\n"
-            f"Question: {answer}\nAnswer:"
-        )
+        # Construct the request for Gemini
+        endpoint = f"projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/{PUBLISHER_MODEL_ID}:predict"
+
+        instances = [
+            {
+                "content": f"You are an expert tutor specializing in K-12 education across math, science, English, and social studies. Answer the following question clearly and appropriately for a student:\n\nQuestion: {answer}\nAnswer:"
+            }
+        ]
+
+        parameters = {
+            "temperature": 0.7,
+            "maxOutputTokens": 200,
+        }
 
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are an expert K-12 tutor."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=200,
+            response = client.predict(
+                endpoint=endpoint,
+                instances=instances,
+                parameters=parameters,
             )
 
-            answer_text = response.choices[0].message['content'].strip()
+            # Gemini returns the predictions in response.predictions
+            # Extract the content from the first prediction
+            answer_text = response.predictions[0].get("content", "").strip()
 
             return jsonify({
                 "question": answer_text,
@@ -94,6 +106,7 @@ def submit_answer():
             "question": "Unknown session state. Please start over.",
             "guidance": ""
         })
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
