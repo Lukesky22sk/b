@@ -4,16 +4,12 @@ import openai
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # Load variables from .env file if present
+load_dotenv()  # Load environment variables from a .env file if present
 
 app = Flask(__name__)
 CORS(app)
 
-# Get OpenAI API key from environment variable
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
-if not openai.api_key:
-    raise ValueError("OPENAI_API_KEY environment variable not set")
 
 QUESTIONS = [
     {"question": "What's your name?", "guidance": "Please type your full name."},
@@ -99,7 +95,6 @@ def submit_answer():
             "question": "Unknown session state. Please start over.",
             "guidance": ""
         })
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
