@@ -4,12 +4,12 @@ import openai
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # Load environment variables from a .env file if present
+# Load environment variables from .env
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__)
 CORS(app)
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 QUESTIONS = [
     {"question": "What's your name?", "guidance": "Please type your full name."},
@@ -60,24 +60,24 @@ def submit_answer():
                 "guidance": ""
             })
 
-        prompt = (
-            f"You are an expert tutor specializing in K-12 education across math, science, English, "
-            f"and social studies. Answer the following question clearly and appropriately for a student:\n\n"
-            f"Question: {answer}\nAnswer:"
-        )
-
         try:
-            response = openai.Completion.create(
-                engine="text-davinci-003",
-                prompt=prompt,
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert tutor specializing in K-12 education across math, science, English, and social studies."
+                    },
+                    {
+                        "role": "user",
+                        "content": answer
+                    }
+                ],
                 temperature=0.7,
-                max_tokens=200,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0
+                max_tokens=300
             )
 
-            answer_text = response.choices[0].text.strip()
+            answer_text = response.choices[0].message["content"].strip()
 
             return jsonify({
                 "question": answer_text,
