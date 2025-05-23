@@ -1,30 +1,40 @@
-from flask import Flask, request, jsonify
-from openai import OpenAI
-from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+import openai
 import os
+from pydantic import BaseModel
+from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-app = Flask(__name__)
+# Initialize FastAPI app
+app = FastAPI()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Allow CORS (important for frontend to talk to backend)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change this to your frontend domain in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    user_message = request.json.get('message')
-    if not user_message:
-        return jsonify({'error': 'No message provided'}), 400
+# Request schema
+class ChatRequest(BaseModel):
+    message: str
 
+# Endpoint to handle chat requests
+@app.post("/chat")
+async def chat(request: ChatRequest):
     try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": user_message}]
+        response = openai.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "user", "content": request.message}
+            ]
         )
-        reply = response.choices[0].message.content
-        return jsonify({'response': reply})
-
+        return {"reply": response.choices[0].message.content.strip()}
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        return {"error": str(e)}
