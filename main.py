@@ -1,46 +1,62 @@
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import openai
 from dotenv import load_dotenv
 
-# Load environment variables from .env (if local)
+# Load environment variables from .env
 load_dotenv()
 
 # Initialize FastAPI app
 app = FastAPI()
 
-# Enable CORS (adjust origins as needed)
+# CORS settings (adjust for production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change this in production!
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Set OpenAI API key from environment
+# Set OpenAI key from environment
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Request model
+# Define the request structure
 class PromptRequest(BaseModel):
     prompt: str
 
-# Root route supporting GET and HEAD (for health checks)
-@app.api_route("/", methods=["GET", "HEAD"])
-async def read_root_head():
-    return Response(content='{"message": "FastAPI backend is running"}', media_type="application/json")
+# Root endpoint for Render health check
+@app.get("/")
+def read_root():
+    return {"message": "Socratic Bot backend is live."}
 
-# Main route to get response from OpenAI
+# Socratic endpoint that guides via questions
 @app.post("/chat")
-async def chat(request: PromptRequest):
+async def socratic_guide(request: PromptRequest):
     try:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a Socratic AI mentor. Do not give answers. "
+                    "Only respond with thoughtful, open-ended questions that challenge the user's assumptions, "
+                    "encourage deeper thinking, or help clarify the issue they are exploring."
+                )
+            },
+            {"role": "user", "content": request.prompt}
+        ]
+
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Change model if needed
-            messages=[{"role": "user", "content": request.prompt}],
-            temperature=0.7,
+            model="gpt-3.5-turbo",
+            messages=messages,
+            temperature=0.85,
         )
-        return {"response": response['choices'][0]['message']['content']}
+
+        return {
+            "response": response['choices'][0]['message']['content']
+        }
+
     except Exception as e:
         return {"error": str(e)}
