@@ -8,10 +8,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-# Initialize FastAPI app
 app = FastAPI()
 
-# CORS settings (adjust for production)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,43 +18,55 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Set OpenAI key from environment
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Define the request structure
-class PromptRequest(BaseModel):
-    prompt: str
+class AnswerRequest(BaseModel):
+    user: str
+    answer: str
 
-# Root endpoint for Render health check
+# In-memory user state
+user_states = {}
+
+@app.get("/api/questions")
+async def get_question(user: str):
+    if user not in user_states:
+        user_states[user] = {
+            "question": "What topic would you like to explore?",
+            "guidance": "Try to be as specific as possible with your answer."
+        }
+    return user_states[user]
+
+@app.post("/api/answers")
+async def post_answer(data: AnswerRequest):
+    user = data.user
+    user_answer = data.answer
+
+    prompt = (
+        f"You are a Socratic AI mentor. The student answered: '{user_answer}'.\n"
+        "Respond ONLY with a thoughtful, open-ended question or hint that encourages deeper thinking. "
+        "Do NOT give direct answers."
+    )
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a Socratic AI mentor."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.85,
+        )
+        guidance = response['choices'][0]['message']['content']
+    except Exception as e:
+        guidance = "Sorry, I couldn't process your request. Please try again."
+
+    user_states[user] = {
+        "question": f"Considering your answer '{user_answer}', what do you think about this?",
+        "guidance": guidance
+    }
+
+    return user_states[user]
+
 @app.get("/")
 def read_root():
     return {"message": "Socratic Bot backend is live."}
-
-# Socratic endpoint that guides via questions
-@app.post("/chat")
-async def socratic_guide(request: PromptRequest):
-    try:
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a Socratic AI mentor. Do not give answers. "
-                    "Only respond with thoughtful, open-ended questions that challenge the user's assumptions, "
-                    "encourage deeper thinking, or help clarify the issue they are exploring."
-                )
-            },
-            {"role": "user", "content": request.prompt}
-        ]
-
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=0.85,
-        )
-
-        return {
-            "response": response['choices'][0]['message']['content']
-        }
-
-    except Exception as e:
-        return {"error": str(e)}
