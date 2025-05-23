@@ -11,7 +11,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust this for security in production
+    allow_origins=["*"],  # Adjust in production for security
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,8 +34,10 @@ async def socratic_guide(request: PromptRequest):
                 "role": "system",
                 "content": (
                     "You are a Socratic AI mentor. "
-                    "Do not give direct answers. Instead, guide the user by asking thoughtful, open-ended questions. "
-                    "Help them explore methods or steps to solve their problem."
+                    "Do NOT give direct answers or ask the user questions. "
+                    "Instead, list specific methods or approaches relevant to the user's problem, "
+                    "and walk them through each method step-by-step, explaining how to apply them. "
+                    "Your goal is to help the user solve the problem by guiding them logically through the process."
                 )
             },
             {"role": "user", "content": request.prompt}
@@ -44,11 +46,11 @@ async def socratic_guide(request: PromptRequest):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
-            temperature=0.85,
-            max_tokens=500,
+            temperature=0.7,
+            max_tokens=700,
         )
 
-        answer = response.choices[0].message.content
+        answer = response.choices[0].message.content.strip()
         return {"response": answer}
 
     except Exception as e:
