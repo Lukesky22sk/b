@@ -1,63 +1,55 @@
 import os
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 app = FastAPI()
 
-# Enable CORS for all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # You can restrict this in production
+    allow_origins=["*"],  # Adjust this for security in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/api/questions")
-async def get_question(user: str):
-    return {
-        "question": "What do you think is the best way to approach solving this problem?",
-        "guidance": "Consider breaking it down into smaller parts. What do you already know about this type of problem?"
-    }
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-@app.post("/api/answers")
-async def post_answer(request: Request):
-    body = await request.json()
-    user_answer = body.get("answer", "")
-    user_id = body.get("user", "anonymous")
+class PromptRequest(BaseModel):
+    prompt: str
 
+@app.get("/")
+def root():
+    return {"message": "Socratic Bot backend is live."}
+
+@app.post("/chat")
+async def socratic_guide(request: PromptRequest):
     try:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a Socratic AI mentor. "
+                    "Do not give direct answers. Instead, guide the user by asking thoughtful, open-ended questions. "
+                    "Help them explore methods or steps to solve their problem."
+                )
+            },
+            {"role": "user", "content": request.prompt}
+        ]
+
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a Socratic tutor. Never give direct answers. "
-                        "Instead, guide the student by asking questions, suggesting methods, and prompting them to think critically. "
-                        "Be warm, supportive, and intellectually engaging. The goal is to help the student reach the solution themselves."
-                    )
-                },
-                {"role": "user", "content": user_answer}
-            ],
+            model="gpt-4o-mini",
+            messages=messages,
             temperature=0.85,
+            max_tokens=500,
         )
 
-        socratic_reply = response.choices[0].message.content.strip()
-
-        return {
-            "question": socratic_reply,
-            "guidance": "Keep exploring the idea. Think about what concepts or methods could help you move forward."
-        }
+        answer = response.choices[0].message.content
+        return {"response": answer}
 
     except Exception as e:
-        return {
-            "question": "Something went wrong processing your response.",
-            "guidance": str(e)
-        }
+        return {"error": str(e)}
