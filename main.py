@@ -82,9 +82,34 @@ def get_question(user: str):
 # Endpoint to receive user's answer and return next question/guidance
 @app.post("/api/answers")
 def post_answer(data: AnswerRequest):
-    # Save user's answer and generate a new question/guidance
-    user_data[data.user] = {
-        "question": f"You answered: {data.answer}. What made you think that?",
-        "guidance": "Try to explain your reasoning."
-    }
-    return user_data[data.user]
+    try:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a Socratic AI mentor. Do not give answers. "
+                    "Only respond with thoughtful, open-ended questions that challenge the user's assumptions, "
+                    "encourage deeper thinking, or help clarify the issue they are exploring."
+                )
+            },
+            {"role": "user", "content": data.answer}
+        ]
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            temperature=0.85,
+        )
+
+        question = response['choices'][0]['message']['content']
+
+        user_data[data.user] = {
+            "question": question,
+            "guidance": "Reflect on this and consider alternative viewpoints."
+        }
+
+        return user_data[data.user]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
