@@ -1,59 +1,63 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from dotenv import load_dotenv
 import os
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
+from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
+# Enable CORS for all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # You can restrict this in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-user_data = {}
-
-class AnswerRequest(BaseModel):
-    user: str
-    answer: str
+@app.get("/api/questions")
+async def get_question(user: str):
+    return {
+        "question": "What do you think is the best way to approach solving this problem?",
+        "guidance": "Consider breaking it down into smaller parts. What do you already know about this type of problem?"
+    }
 
 @app.post("/api/answers")
-def post_answer(data: AnswerRequest):
-    try:
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a Socratic AI mentor. Do not give answers. "
-                    "Only respond with thoughtful, open-ended questions that challenge the user's assumptions, "
-                    "encourage deeper thinking, or help clarify the issue they are exploring."
-                )
-            },
-            {"role": "user", "content": data.answer}
-        ]
+async def post_answer(request: Request):
+    body = await request.json()
+    user_answer = body.get("answer", "")
+    user_id = body.get("user", "anonymous")
 
+    try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=messages,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a Socratic tutor. Never give direct answers. "
+                        "Instead, guide the student by asking questions, suggesting methods, and prompting them to think critically. "
+                        "Be warm, supportive, and intellectually engaging. The goal is to help the student reach the solution themselves."
+                    )
+                },
+                {"role": "user", "content": user_answer}
+            ],
             temperature=0.85,
         )
 
-        question = response.choices[0].message.content
+        socratic_reply = response.choices[0].message.content.strip()
 
-        user_data[data.user] = {
-            "question": question,
-            "guidance": "Reflect on this and consider alternative viewpoints."
+        return {
+            "question": socratic_reply,
+            "guidance": "Keep exploring the idea. Think about what concepts or methods could help you move forward."
         }
 
-        return user_data[data.user]
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OpenAI error: {str(e)}")
+        return {
+            "question": "Something went wrong processing your response.",
+            "guidance": str(e)
+        }
