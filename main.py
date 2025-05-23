@@ -1,40 +1,46 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-import openai
-import os
 from pydantic import BaseModel
+import os
+import openai
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env (if local)
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Initialize FastAPI app
 app = FastAPI()
 
-# Allow CORS (important for frontend to talk to backend)
+# Enable CORS (adjust origins as needed)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change this to your frontend domain in production
+    allow_origins=["*"],  # Change this in production!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Request schema
-class ChatRequest(BaseModel):
-    message: str
+# Set OpenAI API key from environment
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Endpoint to handle chat requests
+# Request model
+class PromptRequest(BaseModel):
+    prompt: str
+
+# Root route (for Render health check or browser test)
+@app.get("/")
+def read_root():
+    return {"message": "FastAPI backend is running"}
+
+# Main route to get response from OpenAI
 @app.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(request: PromptRequest):
     try:
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "user", "content": request.message}
-            ]
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",  # Change model if needed
+            messages=[{"role": "user", "content": request.prompt}],
+            temperature=0.7,
         )
-        return {"reply": response.choices[0].message.content.strip()}
+        return {"response": response['choices'][0]['message']['content']}
     except Exception as e:
         return {"error": str(e)}
