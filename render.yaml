@@ -1,10 +1,11 @@
 services:
   - type: web
-    name: openai-backend
+    name: socratic-bot-backend
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python app.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app
     envVars:
       - key: OPENAI_API_KEY
-        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11
